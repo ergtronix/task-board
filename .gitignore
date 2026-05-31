@@ -220,6 +220,10 @@ __marimo__/
 # Node.js
 node_modules/
 
+# Task files (local only, not for version control)
+tasks/
+TASKS.md
+
 # API Keys
 *.key
 secret.json
