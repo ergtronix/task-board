@@ -1,97 +1,95 @@
-import { useState, useEffect } from 'react'
-import styles from './App.module.css'
-
-const STORAGE_KEY = 'task-board-tasks'
-
-function loadTasks() {
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY)
-    return saved ? JSON.parse(saved) : []
-  } catch {
-    return []
-  }
-}
-
-function getNextId(tasks) {
-  return tasks.length === 0 ? 1 : Math.max(...tasks.map(t => t.id)) + 1
-}
+import { useState, useEffect, useCallback } from 'react'
+import KanbanBoard from './components/KanbanBoard'
+import TaskModal from './components/TaskModal'
+import NewTaskForm from './components/NewTaskForm'
 
 export default function App() {
-  const [tasks, setTasks] = useState(loadTasks)
-  const [input, setInput] = useState('')
+  const [tasks, setTasks] = useState([])
+  const [selectedTask, setSelectedTask] = useState(null)
+  const [showNewForm, setShowNewForm] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+
+  const fetchTasks = useCallback(async () => {
+    try {
+      const res = await fetch('/api/tasks')
+      if (!res.ok) throw new Error('Failed to fetch tasks')
+      setTasks(await res.json())
+      setError(null)
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks))
-  }, [tasks])
+    fetchTasks()
+    const es = new EventSource('/api/tasks/events')
+    es.onmessage = (e) => {
+      const { type, payload } = JSON.parse(e.data)
+      if (type === 'updated') {
+        setTasks(prev => {
+          const idx = prev.findIndex(t => t.id === payload.id)
+          if (idx === -1) return [...prev, payload]
+          const next = [...prev]
+          next[idx] = payload
+          return next
+        })
+        setSelectedTask(prev => prev?.id === payload.id ? payload : prev)
+      } else if (type === 'refresh') {
+        fetchTasks()
+      }
+    }
+    es.onopen = () => setError(null)
+    es.onerror = () => setError('サーバーとの接続が切断されました')
+    return () => es.close()
+  }, [fetchTasks])
 
-  function addTask() {
-    const text = input.trim()
-    if (!text) return
-    setTasks(prev => [...prev, { id: getNextId(prev), text, done: false }])
-    setInput('')
-  }
-
-  function toggleTask(id) {
-    setTasks(prev =>
-      prev.map(t => t.id === id ? { ...t, done: !t.done } : t)
-    )
-  }
-
-  function deleteTask(id) {
-    setTasks(prev => prev.filter(t => t.id !== id))
-  }
-
-  function handleKeyDown(e) {
-    if (e.key === 'Enter') addTask()
-  }
+  const blockedCount = tasks.filter(t => t.status === 'blocked').length
 
   return (
-    <div className={styles.container}>
-      <h1 className={styles.title}>タスクボード</h1>
+    <div className="app">
+      <header className="app-header">
+        <div className="header-left">
+          <h1>Task Board</h1>
+          <span className="header-sub">ERG × AI Agent Organization</span>
+        </div>
+        <div className="header-right">
+          {blockedCount > 0 && (
+            <span className="blocked-badge">🔴 Blocked: {blockedCount}</span>
+          )}
+          <button className="btn-primary" onClick={() => setShowNewForm(true)}>
+            + New Task
+          </button>
+        </div>
+      </header>
 
-      <div className={styles.inputRow}>
-        <input
-          className={styles.input}
-          type="text"
-          placeholder="新しいタスクを入力..."
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-        />
-        <button className={styles.addButton} onClick={addTask}>
-          追加
-        </button>
-      </div>
+      {error && <div className="error-bar">⚠ {error} — サーバーが起動しているか確認してください</div>}
 
-      {tasks.length === 0 ? (
-        <p className={styles.empty}>タスクがありません</p>
+      {loading ? (
+        <div className="loading">Loading tasks...</div>
       ) : (
-        <ul className={styles.list}>
-          {tasks.map(task => (
-            <li key={task.id} className={`${styles.item} ${task.done ? styles.done : ''}`}>
-              <input
-                type="checkbox"
-                className={styles.checkbox}
-                checked={task.done}
-                onChange={() => toggleTask(task.id)}
-              />
-              <span className={styles.text}>{task.text}</span>
-              <button
-                className={styles.deleteButton}
-                onClick={() => deleteTask(task.id)}
-                aria-label="削除"
-              >
-                ✕
-              </button>
-            </li>
-          ))}
-        </ul>
+        <KanbanBoard tasks={tasks} onTaskClick={setSelectedTask} />
       )}
 
-      {tasks.length > 0 && (
-        <p className={styles.summary}>
-          {tasks.filter(t => t.done).length} / {tasks.length} 完了
-        </p>
+      {selectedTask && (
+        <TaskModal
+          key={selectedTask.id}
+          task={selectedTask}
+          onClose={() => setSelectedTask(null)}
+          onUpdate={setSelectedTask}
+        />
+      )}
+
+      {showNewForm && (
+        <NewTaskForm
+          onClose={() => setShowNewForm(false)}
+          onCreate={(task) => {
+            setTasks(prev => [...prev, task])
+            setShowNewForm(false)
+          }}
+        />
       )}
     </div>
   )
