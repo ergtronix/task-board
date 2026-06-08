@@ -1,3 +1,36 @@
+# Task Board
+
+ERGとAIエージェント組織のためのローカルタスク管理ボード。Markdownファイルでタスクを管理し、カンバン形式でステータスを可視化します。
+
+## スクリーンショット
+
+![Task Board](docs/screenshot.png)
+
+## 技術スタック
+
+- **フロントエンド**: React 18 + Vite
+- **バックエンド**: Express (Node.js)
+- **データ**: Markdownファイル（gray-matter でフロントマター管理）
+- **リアルタイム同期**: Server-Sent Events (SSE) + chokidar
+
+## 機能
+
+- カンバン表示（New/Pending → In Progress → Blocked → Done）
+- タスクのMarkdownファイル管理（`tasks/TASK-XXX.md`）
+- リアルタイム更新（ファイル変更を即座に反映）
+- タスクの優先度・担当者管理
+
+## 起動方法
+
+```bash
+npm install
+npm run dev
+```
+
+ブラウザで `http://localhost:5173` を開く。
+
+---
+
 # タスクボード運用マニュアル
 
 > このファイルは、人間とすべてのAIエージェントが共通で参照する「タスクボード運用の憲法」です。
